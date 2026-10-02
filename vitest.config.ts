@@ -6,6 +6,8 @@ export default defineConfig({
     coverage: {
       provider: 'v8',
       include: ['src/**/*.ts'],
+      // Las interfaces solo declaran tipos: al compilar no generan código ejecutable
+      exclude: ['src/interfaces/**'],
       reporter: ['text', 'html'],
       thresholds: { lines: 90 },
     },
