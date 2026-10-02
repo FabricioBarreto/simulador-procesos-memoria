@@ -3,6 +3,7 @@ import { Proceso } from '../../../src/modelos/Proceso';
 import { EstadoProceso } from '../../../src/modelos/EstadoProceso';
 import { DatoInvalidoError } from '../../../src/errores/DatoInvalidoError';
 import { TransicionInvalidaError } from '../../../src/errores/TransicionInvalidaError';
+import { OperacionInvalidaError } from '../../../src/errores/OperacionInvalidaError';
 
 describe('Proceso - creación', () => {
     test('Debe crearse en estado Nuevo con sus datos y la CPU restante completa', () => {
@@ -116,5 +117,83 @@ describe('Proceso - transiciones inválidas', () => {
         proceso.admitir();
 
         expect(() => proceso.esperarMemoria()).toThrow(TransicionInvalidaError);
+    });
+});
+
+// Ayuda para los tests: deja un proceso nuevo en estado Ejecutando
+function procesoEjecutando(cpu: number): Proceso {
+    const proceso = new Proceso(1, 100, cpu);
+    proceso.admitir();
+    proceso.despachar();
+    return proceso;
+}
+
+describe('Proceso - ejecución de CPU', () => {
+    test('ejecutarTick reduce la CPU restante y suma al quantum consumido', () => {
+        const proceso = procesoEjecutando(5);
+
+        proceso.ejecutarTick();
+
+        expect(proceso.cpuRestante).toBe(4);
+        expect(proceso.cpuConsumida).toBe(1);
+        expect(proceso.quantumConsumido).toBe(1);
+        expect(proceso.estado).toBe(EstadoProceso.Ejecutando);
+    });
+
+    test('Debe terminar en el mismo tick en que la CPU restante llega a cero', () => {
+        const proceso = procesoEjecutando(2);
+
+        proceso.ejecutarTick();
+        proceso.ejecutarTick();
+
+        expect(proceso.cpuRestante).toBe(0);
+        expect(proceso.estado).toBe(EstadoProceso.Terminado);
+    });
+
+    test('despachar reinicia el quantum consumido en una nueva ráfaga', () => {
+        const proceso = procesoEjecutando(5);
+        proceso.ejecutarTick();
+        proceso.ejecutarTick();
+        proceso.expulsar();
+
+        proceso.despachar();
+
+        expect(proceso.quantumConsumido).toBe(0);
+        expect(proceso.cpuRestante).toBe(3);
+    });
+
+    test('renovarQuantum reinicia el quantum sin cambiar de estado', () => {
+        const proceso = procesoEjecutando(5);
+        proceso.ejecutarTick();
+        proceso.ejecutarTick();
+
+        proceso.renovarQuantum();
+
+        expect(proceso.quantumConsumido).toBe(0);
+        expect(proceso.estado).toBe(EstadoProceso.Ejecutando);
+    });
+
+    test('No debe ejecutar un tick si no está Ejecutando', () => {
+        const proceso = new Proceso(1, 100, 5);
+        proceso.admitir();
+
+        expect(() => proceso.ejecutarTick()).toThrow(OperacionInvalidaError);
+        expect(proceso.cpuRestante).toBe(5);
+    });
+
+    test('No debe renovar el quantum si no está Ejecutando', () => {
+        const proceso = new Proceso(1, 100, 5);
+
+        expect(() => proceso.renovarQuantum()).toThrow(OperacionInvalidaError);
+    });
+
+    test('Un proceso Terminado no vuelve a las colas ni ejecuta', () => {
+        const proceso = procesoEjecutando(1);
+        proceso.ejecutarTick();
+
+        expect(() => proceso.admitir()).toThrow(TransicionInvalidaError);
+        expect(() => proceso.despachar()).toThrow(TransicionInvalidaError);
+        expect(() => proceso.ejecutarTick()).toThrow(OperacionInvalidaError);
+        expect(proceso.estado).toBe(EstadoProceso.Terminado);
     });
 });

@@ -1,5 +1,6 @@
 import { EstadoProceso } from './EstadoProceso';
 import { TransicionInvalidaError } from '../errores/TransicionInvalidaError';
+import { OperacionInvalidaError } from '../errores/OperacionInvalidaError';
 import { validarEnteroPositivo } from '../utilidades/validarEnteroPositivo';
 
 // Representa un proceso del simulador (RF02, RF03).
@@ -44,6 +45,11 @@ export class Proceso {
         return this.#cpuRestante;
     }
 
+    // Valor derivado: no se guarda, se calcula (lo usará la E/S en RF08)
+    public get cpuConsumida(): number {
+        return this.#cpuTotal - this.#cpuRestante;
+    }
+
     public get estado(): EstadoProceso {
         return this.#estado;
     }
@@ -75,12 +81,40 @@ export class Proceso {
         this.#cambiarEstado([EstadoProceso.Ejecutando], EstadoProceso.Listo);
     }
 
-    // Método privado: único lugar donde se modifica #estado
+    // Consume una unidad de CPU (RF07). Si llega a cero, termina en este mismo tick
+    public ejecutarTick(): void {
+        this.#exigirEstado(EstadoProceso.Ejecutando, 'ejecutar un tick');
+
+        this.#cpuRestante--;
+        this.#quantumConsumido++;
+
+        if (this.#cpuRestante === 0) {
+            this.#cambiarEstado([EstadoProceso.Ejecutando], EstadoProceso.Terminado);
+        }
+    }
+
+    // Agotó el quantum pero no hay otros Listos: sigue en CPU con el quantum
+    // reiniciado, sin cambio de contexto (RF07)
+    public renovarQuantum(): void {
+        this.#exigirEstado(EstadoProceso.Ejecutando, 'renovar el quantum');
+        this.#quantumConsumido = 0;
+    }
+
+    // Métodos privados
+
+    // Único lugar donde se modifica #estado
     #cambiarEstado(origenesPermitidos: readonly EstadoProceso[], destino: EstadoProceso): void {
         if (!origenesPermitidos.includes(this.#estado)) {
             throw new TransicionInvalidaError(this.#estado, destino);
         }
 
         this.#estado = destino;
+    }
+
+    // Para operaciones que no cambian de estado pero exigen estar en uno
+    #exigirEstado(requerido: EstadoProceso, operacion: string): void {
+        if (this.#estado !== requerido) {
+            throw new OperacionInvalidaError(operacion, this.#estado);
+        }
     }
 }
