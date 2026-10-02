@@ -31,3 +31,11 @@ describe('DatoInvalidoError', () => {
         expect(lanzar).toThrow(ErrorDominio);
     });
 });
+
+describe('DatoInvalidoError - requisito personalizado', () => {
+    test('Debe permitir indicar otro requisito en el mensaje', () => {
+        const error = new DatoInvalidoError('inicio del bloque', -1, 'un entero mayor o igual a cero');
+
+        expect(error.message).toBe('inicio del bloque debe ser un entero mayor o igual a cero (recibido: -1)');
+    });
+});
