@@ -4,6 +4,8 @@ import { EstadoProceso } from '../../../src/modelos/EstadoProceso';
 import { DatoInvalidoError } from '../../../src/errores/DatoInvalidoError';
 import { TransicionInvalidaError } from '../../../src/errores/TransicionInvalidaError';
 import { OperacionInvalidaError } from '../../../src/errores/OperacionInvalidaError';
+import { EventoESInvalidoError } from '../../../src/errores/EventoESInvalidoError';
+import { EventoES } from '../../../src/modelos/EventoES';
 
 describe('Proceso - creación', () => {
     test('Debe crearse en estado Nuevo con sus datos y la CPU restante completa', () => {
@@ -195,5 +197,87 @@ describe('Proceso - ejecución de CPU', () => {
         expect(() => proceso.despachar()).toThrow(TransicionInvalidaError);
         expect(() => proceso.ejecutarTick()).toThrow(OperacionInvalidaError);
         expect(proceso.estado).toBe(EstadoProceso.Terminado);
+    });
+});
+
+describe('Proceso - Entrada/Salida (RF08)', () => {
+    test('Debe bloquearse al llegar a los ticks de CPU indicados y conservar su CPU restante', () => {
+        const proceso = new Proceso(1, 100, 5);
+        proceso.programarES(new EventoES(2, 3));
+        proceso.admitir();
+        proceso.despachar();
+
+        proceso.ejecutarTick();
+        expect(proceso.estado).toBe(EstadoProceso.Ejecutando);
+
+        proceso.ejecutarTick();
+        expect(proceso.estado).toBe(EstadoProceso.Bloqueado);
+        expect(proceso.cpuRestante).toBe(3);
+        expect(proceso.bloqueoRestante).toBe(3);
+        expect(proceso.tieneEventoES).toBe(false);
+    });
+
+    test('avanzarBloqueo baja el temporizador y vuelve a Listo al llegar a cero', () => {
+        const proceso = procesoEjecutando(5);
+        proceso.programarES(new EventoES(1, 2));
+        proceso.ejecutarTick();
+
+        proceso.avanzarBloqueo();
+        expect(proceso.estado).toBe(EstadoProceso.Bloqueado);
+        expect(proceso.bloqueoRestante).toBe(1);
+
+        proceso.avanzarBloqueo();
+        expect(proceso.estado).toBe(EstadoProceso.Listo);
+        expect(proceso.bloqueoRestante).toBe(0);
+    });
+
+    test('Durante el bloqueo no consume CPU', () => {
+        const proceso = procesoEjecutando(5);
+        proceso.programarES(new EventoES(1, 2));
+        proceso.ejecutarTick();
+
+        expect(() => proceso.ejecutarTick()).toThrow(OperacionInvalidaError);
+        expect(proceso.cpuRestante).toBe(4);
+    });
+
+    test('El evento se dispara una sola vez: al volver sigue ejecutando hasta terminar', () => {
+        const proceso = procesoEjecutando(3);
+        proceso.programarES(new EventoES(1, 1));
+        proceso.ejecutarTick();
+        proceso.avanzarBloqueo();
+        proceso.despachar();
+
+        proceso.ejecutarTick();
+        proceso.ejecutarTick();
+
+        expect(proceso.estado).toBe(EstadoProceso.Terminado);
+    });
+
+    test('Debe rechazar un evento que nunca llegaría a dispararse porque el proceso termina antes', () => {
+        const proceso = new Proceso(1, 100, 3);
+
+        expect(() => proceso.programarES(new EventoES(3, 2))).toThrow(EventoESInvalidoError);
+        expect(proceso.tieneEventoES).toBe(false);
+    });
+
+    test('Debe rechazar un evento en un punto de CPU que ya pasó', () => {
+        const proceso = procesoEjecutando(5);
+        proceso.ejecutarTick();
+        proceso.ejecutarTick();
+
+        expect(() => proceso.programarES(new EventoES(2, 1))).toThrow(EventoESInvalidoError);
+    });
+
+    test('Debe rechazar un segundo evento si ya tiene uno programado', () => {
+        const proceso = new Proceso(1, 100, 5);
+        proceso.programarES(new EventoES(2, 1));
+
+        expect(() => proceso.programarES(new EventoES(3, 1))).toThrow(EventoESInvalidoError);
+    });
+
+    test('No debe avanzar el bloqueo si no está Bloqueado', () => {
+        const proceso = new Proceso(1, 100, 5);
+
+        expect(() => proceso.avanzarBloqueo()).toThrow(OperacionInvalidaError);
     });
 });

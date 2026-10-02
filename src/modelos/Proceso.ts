@@ -1,6 +1,8 @@
 import { EstadoProceso } from './EstadoProceso';
+import { EventoES } from './EventoES';
 import { TransicionInvalidaError } from '../errores/TransicionInvalidaError';
 import { OperacionInvalidaError } from '../errores/OperacionInvalidaError';
+import { EventoESInvalidoError } from '../errores/EventoESInvalidoError';
 import { validarEnteroPositivo } from '../utilidades/validarEnteroPositivo';
 
 // Representa un proceso del simulador (RF02, RF03).
@@ -13,6 +15,8 @@ export class Proceso {
     #cpuRestante: number;
     #estado: EstadoProceso;
     #quantumConsumido: number;
+    #bloqueoRestante: number;
+    #eventoES: EventoES | null;
 
     constructor(pid: number, memoriaRequerida: number, cpuTotal: number) {
         // Se valida todo antes de asignar: si algo falla, el objeto no se crea
@@ -26,6 +30,8 @@ export class Proceso {
         this.#cpuRestante = cpuTotal;
         this.#estado = EstadoProceso.Nuevo;
         this.#quantumConsumido = 0;
+        this.#bloqueoRestante = 0;
+        this.#eventoES = null;
     }
 
     // Getters públicos (solo lectura, sin setters)
@@ -58,6 +64,14 @@ export class Proceso {
         return this.#quantumConsumido;
     }
 
+    public get bloqueoRestante(): number {
+        return this.#bloqueoRestante;
+    }
+
+    public get tieneEventoES(): boolean {
+        return this.#eventoES !== null;
+    }
+
     // Operaciones del dominio: cada una indica desde qué estados es válida
 
     // No hay bloque de memoria suficiente al intentar admitirlo
@@ -81,7 +95,8 @@ export class Proceso {
         this.#cambiarEstado([EstadoProceso.Ejecutando], EstadoProceso.Listo);
     }
 
-    // Consume una unidad de CPU (RF07). Si llega a cero, termina en este mismo tick
+    // Consume una unidad de CPU (RF07). Orden de prioridad al final del tick:
+    // 1) si la CPU llega a cero, termina; 2) si corresponde la E/S, se bloquea
     public ejecutarTick(): void {
         this.#exigirEstado(EstadoProceso.Ejecutando, 'ejecutar un tick');
 
@@ -90,6 +105,41 @@ export class Proceso {
 
         if (this.#cpuRestante === 0) {
             this.#cambiarEstado([EstadoProceso.Ejecutando], EstadoProceso.Terminado);
+            return;
+        }
+
+        const evento = this.#eventoES;
+
+        if (evento !== null && this.cpuConsumida === evento.despuesDeCpu) {
+            this.#bloquear(evento.duracion);
+        }
+    }
+
+    // Programa un evento de E/S (RF08). Se rechaza si nunca llegaría a
+    // dispararse (el proceso termina antes o ya pasó ese punto) o si ya hay uno
+    public programarES(evento: EventoES): void {
+        if (this.#eventoES !== null) {
+            throw new EventoESInvalidoError('el proceso ya tiene un evento programado');
+        }
+
+        if (evento.despuesDeCpu <= this.cpuConsumida || evento.despuesDeCpu >= this.#cpuTotal) {
+            throw new EventoESInvalidoError(
+                `debe dispararse entre ${this.cpuConsumida + 1} y ${this.#cpuTotal - 1} ticks de CPU`
+            );
+        }
+
+        this.#eventoES = evento;
+    }
+
+    // Fase de actualización de bloqueados: baja el temporizador y,
+    // al llegar a cero, vuelve a Listo
+    public avanzarBloqueo(): void {
+        this.#exigirEstado(EstadoProceso.Bloqueado, 'avanzar el bloqueo');
+
+        this.#bloqueoRestante--;
+
+        if (this.#bloqueoRestante === 0) {
+            this.#cambiarEstado([EstadoProceso.Bloqueado], EstadoProceso.Listo);
         }
     }
 
@@ -109,6 +159,14 @@ export class Proceso {
         }
 
         this.#estado = destino;
+    }
+
+    // Libera la CPU pero conserva la memoria (eso lo maneja el simulador).
+    // El evento se consume: una vez disparado no vuelve a ocurrir
+    #bloquear(duracion: number): void {
+        this.#cambiarEstado([EstadoProceso.Ejecutando], EstadoProceso.Bloqueado);
+        this.#bloqueoRestante = duracion;
+        this.#eventoES = null;
     }
 
     // Para operaciones que no cambian de estado pero exigen estar en uno
