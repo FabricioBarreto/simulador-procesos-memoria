@@ -185,3 +185,41 @@ describe('PlanificadorRoundRobin - bloqueo por E/S (RF08)', () => {
         expect(planificador.cambiosContexto).toBe(1);
     });
 });
+
+describe('PlanificadorRoundRobin - retirar un proceso (finalización forzada)', () => {
+    // Si está en la cola, se lo saca sin alterar el orden de los demás
+    test('Retira un proceso de la cola de Listos', () => {
+        const planificador = new PlanificadorRoundRobin(2);
+        const p2 = procesoListo(2, 3);
+        planificador.encolar(procesoListo(1, 3));
+        planificador.encolar(p2);
+        planificador.encolar(procesoListo(3, 3));
+
+        planificador.retirar(p2);
+
+        expect(planificador.colaListos.map((p) => p.pid)).toEqual([1, 3]);
+    });
+
+    // Si está en la CPU, la CPU queda libre y no cuenta cambio de contexto
+    test('Retira el proceso en CPU y la deja libre sin contar cambio de contexto', () => {
+        const planificador = new PlanificadorRoundRobin(2);
+        const p1 = procesoListo(1, 5);
+        planificador.encolar(p1);
+        planificador.ejecutarTick();
+
+        planificador.retirar(p1);
+
+        expect(planificador.procesoEnCpu).toBeNull();
+        expect(planificador.cambiosContexto).toBe(0);
+    });
+
+    // Si no está ni en la CPU ni en la cola, no pasa nada
+    test('Retirar un proceso que no está no modifica nada', () => {
+        const planificador = new PlanificadorRoundRobin(2);
+        planificador.encolar(procesoListo(1, 3));
+
+        planificador.retirar(procesoListo(9, 3));
+
+        expect(planificador.colaListos.map((p) => p.pid)).toEqual([1]);
+    });
+});

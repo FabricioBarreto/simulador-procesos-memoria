@@ -76,6 +76,21 @@ export class PlanificadorRoundRobin implements IPlanificador {
         return proceso;
     }
 
+    // Saca un proceso de la CPU o de la cola sin ejecutarlo (finalización forzada).
+    // Si no estaba en ninguna de las dos, no hace nada. No cuenta cambio de contexto
+    public retirar(proceso: Proceso): void {
+        if (this.#procesoEnCpu === proceso) {
+            this.#procesoEnCpu = null;
+            return;
+        }
+
+        const indice = this.#colaListos.indexOf(proceso);
+
+        if (indice !== -1) {
+            this.#colaListos.splice(indice, 1);
+        }
+    }
+
     // Métodos privados
 
     #despacharSiguiente(): void {

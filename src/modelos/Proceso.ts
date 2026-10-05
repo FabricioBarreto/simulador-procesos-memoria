@@ -143,6 +143,23 @@ export class Proceso {
         }
     }
 
+    // Finalización forzada (para la defensa: "provocar la liberación de un
+    // proceso determinado"). Vale desde cualquier estado menos Terminado
+    public finalizar(): void {
+        this.#cambiarEstado(
+            [
+                EstadoProceso.Nuevo,
+                EstadoProceso.EsperandoMemoria,
+                EstadoProceso.Listo,
+                EstadoProceso.Ejecutando,
+                EstadoProceso.Bloqueado,
+            ],
+            EstadoProceso.Terminado
+        );
+        this.#bloqueoRestante = 0;
+        this.#eventoES = null;
+    }
+
     // Agotó el quantum pero no hay otros Listos: sigue en CPU con el quantum
     // reiniciado, sin cambio de contexto (RF07)
     public renovarQuantum(): void {

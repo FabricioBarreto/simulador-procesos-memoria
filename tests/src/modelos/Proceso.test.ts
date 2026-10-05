@@ -281,3 +281,39 @@ describe('Proceso - Entrada/Salida (RF08)', () => {
         expect(() => proceso.avanzarBloqueo()).toThrow(OperacionInvalidaError);
     });
 });
+
+describe('Proceso - finalización forzada (defensa)', () => {
+    // Se puede terminar a la fuerza desde cualquier estado que no sea Terminado
+    test.each([
+        ['Nuevo', (p: Proceso) => p],
+        ['Esperando Memoria', (p: Proceso) => { p.esperarMemoria(); return p; }],
+        ['Listo', (p: Proceso) => { p.admitir(); return p; }],
+        ['Ejecutando', (p: Proceso) => { p.admitir(); p.despachar(); return p; }],
+    ])('Desde %s pasa a Terminado', (_estado, preparar) => {
+        const proceso = preparar(new Proceso(1, 100, 5));
+
+        proceso.finalizar();
+
+        expect(proceso.estado).toBe(EstadoProceso.Terminado);
+    });
+
+    // Desde Bloqueado: además se limpia el temporizador de E/S
+    test('Desde Bloqueado pasa a Terminado y limpia el bloqueo', () => {
+        const proceso = procesoEjecutando(5);
+        proceso.programarES(new EventoES(1, 3));
+        proceso.ejecutarTick();
+
+        proceso.finalizar();
+
+        expect(proceso.estado).toBe(EstadoProceso.Terminado);
+        expect(proceso.bloqueoRestante).toBe(0);
+    });
+
+    // Un proceso ya terminado no se puede volver a terminar
+    test('No se puede finalizar un proceso que ya terminó', () => {
+        const proceso = procesoEjecutando(1);
+        proceso.ejecutarTick();
+
+        expect(() => proceso.finalizar()).toThrow(TransicionInvalidaError);
+    });
+});

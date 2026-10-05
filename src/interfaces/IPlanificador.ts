@@ -10,4 +10,5 @@ export interface IPlanificador {
 
     encolar(proceso: Proceso): void;
     ejecutarTick(): Proceso | null;
+    retirar(proceso: Proceso): void;
 }

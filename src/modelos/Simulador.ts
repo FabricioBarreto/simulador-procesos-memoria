@@ -200,6 +200,40 @@ export class Simulador implements ISimulador {
         );
     }
 
+    // ---------- Finalización forzada (para la defensa) ----------
+
+    // Termina un proceso en cualquier estado, sin esperar a que agote su CPU.
+    // Lo saca de la CPU, de la cola o de bloqueados y, si tenía memoria, la
+    // libera: así se puede provocar una coalescencia en vivo. Las métricas
+    // se recalculan en el momento, sin avanzar el reloj
+    public finalizarProceso(pid: number): void {
+        const proceso = this.#procesos.get(pid);
+
+        if (proceso === undefined) {
+            throw new RegistroInvalidoError(`no existe un proceso con PID ${pid}`);
+        }
+
+        // Primero el cambio de estado: si ya estaba Terminado lanza error
+        // y no se toca nada más
+        proceso.finalizar();
+
+        this.#planificador.retirar(proceso);
+
+        const indiceBloqueado = this.#bloqueados.indexOf(proceso);
+
+        if (indiceBloqueado !== -1) {
+            this.#bloqueados.splice(indiceBloqueado, 1);
+        }
+
+        if (this.#memoria.tieneMemoria(pid)) {
+            this.#memoria.liberar(pid);
+        }
+
+        this.#metricas = new Metricas(
+            this.#memoria, this.#tick, this.#ticksCpuOcupada, this.#planificador.cambiosContexto
+        );
+    }
+
     // ---------- Ayudas privadas ----------
 
     #pidsEnEstado(estado: EstadoProceso): number[] {

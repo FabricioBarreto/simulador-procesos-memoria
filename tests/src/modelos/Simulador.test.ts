@@ -6,6 +6,7 @@ import { BestFit } from '../../../src/modelos/estrategias/BestFit';
 import { DatoInvalidoError } from '../../../src/errores/DatoInvalidoError';
 import { RegistroInvalidoError } from '../../../src/errores/RegistroInvalidoError';
 import { EventoESInvalidoError } from '../../../src/errores/EventoESInvalidoError';
+import { TransicionInvalidaError } from '../../../src/errores/TransicionInvalidaError';
 
 // Ayuda: avanza N ticks seguidos
 function avanzar(simulador: Simulador, ticks: number): void {
@@ -248,5 +249,99 @@ describe('Simulador - fases de cada tick (RF06)', () => {
 
         expect(simulador.tick).toBe(3);
         expect(simulador.metricas.utilizacionCpu).toBe(0);
+    });
+});
+
+describe('Simulador - finalización forzada de un proceso (defensa)', () => {
+    // Ayuda: memoria de 1000 con 4 procesos de 250 ya admitidos: [P1][P2][P3][P4]
+    function simuladorLleno(): Simulador {
+        const simulador = new Simulador({ memoriaTotal: 1000, quantum: 2 });
+        [1, 2, 3, 4].forEach((pid) => simulador.registrarProceso(pid, 250, 10));
+        simulador.avanzarTick();
+        return simulador;
+    }
+
+    function mapa(simulador: Simulador): (number | null)[][] {
+        return simulador.mapaMemoria.map((b) => [b.inicio, b.tamanio, b.pid]);
+    }
+
+    // Defensa: "provocar la liberación de un proceso determinado" y forzar coalescencia.
+    // Se finaliza P2 (queda un hueco) y después P1: los dos huecos se fusionan
+    test('Finalizar procesos vecinos provoca la coalescencia en vivo', () => {
+        const simulador = simuladorLleno();
+
+        simulador.finalizarProceso(2);
+        expect(mapa(simulador)).toEqual([[0, 250, 1], [250, 250, null], [500, 250, 3], [750, 250, 4]]);
+
+        simulador.finalizarProceso(1);
+        expect(mapa(simulador)).toEqual([[0, 500, null], [500, 250, 3], [750, 250, 4]]);
+        expect(simulador.terminados).toEqual([1, 2]);
+    });
+
+    // Las métricas se recalculan en el momento, sin avanzar el reloj
+    test('Las métricas se actualizan al finalizar, sin avanzar el tick', () => {
+        const simulador = simuladorLleno();
+
+        simulador.finalizarProceso(2);
+
+        expect(simulador.tick).toBe(1);
+        expect(simulador.metricas.ocupacionMemoria).toBe(75);
+        expect(simulador.metricas.memoriaLibreTotal).toBe(250);
+    });
+
+    // El proceso en CPU se retira y la CPU queda libre
+    test('Finalizar el proceso en CPU deja la CPU libre', () => {
+        const simulador = simuladorLleno();
+        expect(simulador.procesoEnCpu).toBe(1);
+
+        simulador.finalizarProceso(1);
+
+        expect(simulador.procesoEnCpu).toBeNull();
+        expect(simulador.colaListos).toEqual([2, 3, 4]);
+    });
+
+    // Un proceso de la cola de Listos sale de la cola
+    test('Finalizar un proceso Listo lo saca de la cola', () => {
+        const simulador = simuladorLleno();
+
+        simulador.finalizarProceso(3);
+
+        expect(simulador.colaListos).toEqual([2, 4]);
+    });
+
+    // Un proceso bloqueado sale de bloqueados y libera la memoria que conservaba
+    test('Finalizar un proceso Bloqueado lo saca de bloqueados y libera su memoria', () => {
+        const simulador = new Simulador();
+        simulador.registrarProceso(1, 100, 5, new EventoES(1, 3));
+        simulador.avanzarTick();
+        expect(simulador.bloqueados).toEqual([1]);
+
+        simulador.finalizarProceso(1);
+
+        expect(simulador.bloqueados).toEqual([]);
+        expect(mapa(simulador)).toEqual([[0, 1024, null]]);
+    });
+
+    // Un proceso que todavía no tenía memoria también se puede finalizar
+    test('Finalizar un proceso Esperando Memoria no libera nada porque no tenía bloque', () => {
+        const simulador = new Simulador({ memoriaTotal: 1000 });
+        simulador.registrarProceso(1, 700, 5);
+        simulador.registrarProceso(2, 500, 5);
+        simulador.avanzarTick();
+
+        simulador.finalizarProceso(2);
+
+        expect(simulador.esperandoMemoria).toEqual([]);
+        expect(simulador.terminados).toEqual([2]);
+        expect(mapa(simulador)).toEqual([[0, 700, 1], [700, 300, null]]);
+    });
+
+    // Errores: PID inexistente o proceso ya terminado
+    test('Debe fallar con un PID inexistente o un proceso ya terminado', () => {
+        const simulador = simuladorLleno();
+        simulador.finalizarProceso(1);
+
+        expect(() => simulador.finalizarProceso(99)).toThrow(RegistroInvalidoError);
+        expect(() => simulador.finalizarProceso(1)).toThrow(TransicionInvalidaError);
     });
 });

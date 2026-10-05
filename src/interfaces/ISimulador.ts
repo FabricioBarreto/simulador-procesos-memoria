@@ -22,4 +22,5 @@ export interface ISimulador {
     consultarProceso(pid: number): VistaProceso;
     listarProcesos(): readonly VistaProceso[];
     avanzarTick(): void;
+    finalizarProceso(pid: number): void;
 }
