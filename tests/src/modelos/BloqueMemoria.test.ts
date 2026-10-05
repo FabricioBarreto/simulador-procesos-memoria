@@ -3,7 +3,9 @@ import { BloqueMemoria } from '../../../src/modelos/BloqueMemoria';
 import { DatoInvalidoError } from '../../../src/errores/DatoInvalidoError';
 import { OperacionMemoriaInvalidaError } from '../../../src/errores/OperacionMemoriaInvalidaError';
 
+// RF04: un bloque tiene inicio, tamaño y proceso asignado o condición de libre
 describe('BloqueMemoria - creación', () => {
+    // Sin pid el bloque está libre; fin = inicio + tamaño
     test('Debe crearse libre por defecto con inicio, tamaño y fin', () => {
         const bloque = new BloqueMemoria(0, 1024);
 
@@ -14,6 +16,7 @@ describe('BloqueMemoria - creación', () => {
         expect(bloque.libre).toBe(true);
     });
 
+    // Con pid el bloque está ocupado por ese proceso
     test('Debe poder crearse ocupado por un proceso', () => {
         const bloque = new BloqueMemoria(100, 50, 7);
 
@@ -21,6 +24,7 @@ describe('BloqueMemoria - creación', () => {
         expect(bloque.libre).toBe(false);
     });
 
+    // El inicio puede ser 0 pero no negativo; el tamaño y el pid deben ser positivos
     test.each([
         [-1, 100, null],
         [0, 0, null],
@@ -30,6 +34,7 @@ describe('BloqueMemoria - creación', () => {
         expect(() => new BloqueMemoria(inicio, tamanio, pid)).toThrow(DatoInvalidoError);
     });
 
+    // Inmutable: no se pueden cambiar el tamaño ni el pid desde afuera
     test('No debe permitir modificar sus datos desde afuera', () => {
         const bloque = new BloqueMemoria(0, 100);
 
@@ -40,7 +45,9 @@ describe('BloqueMemoria - creación', () => {
     });
 });
 
+// RF04: asignación contigua dentro de un bloque
 describe('BloqueMemoria - asignar', () => {
+    // Caso mínimo "Asignación y espera": partición parcial (se divide el bloque)
     test('Partición parcial: ocupa el principio y deja un bloque libre con el resto', () => {
         const bloque = new BloqueMemoria(0, 1024);
 
@@ -54,6 +61,7 @@ describe('BloqueMemoria - asignar', () => {
         expect(restante?.libre).toBe(true);
     });
 
+    // Caso mínimo "Asignación y espera": ajuste exacto, sin bloques de tamaño 0
     test('Ajuste exacto: no genera un bloque de tamaño cero', () => {
         const bloque = new BloqueMemoria(200, 100);
 
@@ -63,6 +71,7 @@ describe('BloqueMemoria - asignar', () => {
         expect(restante).toBeNull();
     });
 
+    // Asignar devuelve bloques nuevos: el original queda igual
     test('El bloque original no cambia (inmutabilidad)', () => {
         const bloque = new BloqueMemoria(0, 1024);
 
@@ -72,18 +81,21 @@ describe('BloqueMemoria - asignar', () => {
         expect(bloque.tamanio).toBe(1024);
     });
 
+    // Un bloque ocupado no se puede volver a asignar
     test('No debe asignar un bloque ocupado', () => {
         const bloque = new BloqueMemoria(0, 100, 1);
 
         expect(() => bloque.asignar(2, 50)).toThrow(OperacionMemoriaInvalidaError);
     });
 
+    // No se puede pedir más de lo que mide el bloque
     test('No debe asignar más memoria de la que tiene el bloque', () => {
         const bloque = new BloqueMemoria(0, 100);
 
         expect(() => bloque.asignar(1, 101)).toThrow(OperacionMemoriaInvalidaError);
     });
 
+    // La cantidad pedida debe ser un entero positivo
     test('Debe rechazar una cantidad solicitada inválida', () => {
         const bloque = new BloqueMemoria(0, 100);
 
@@ -91,7 +103,9 @@ describe('BloqueMemoria - asignar', () => {
     });
 });
 
+// RF05: liberación de un bloque
 describe('BloqueMemoria - liberar', () => {
+    // Liberar devuelve el mismo tramo de memoria, ahora libre
     test('Debe devolver el mismo tramo libre', () => {
         const bloque = new BloqueMemoria(300, 200, 4);
 
@@ -102,6 +116,7 @@ describe('BloqueMemoria - liberar', () => {
         expect(libre.libre).toBe(true);
     });
 
+    // No se puede liberar dos veces
     test('No debe liberar un bloque que ya está libre', () => {
         const bloque = new BloqueMemoria(0, 100);
 
@@ -109,7 +124,9 @@ describe('BloqueMemoria - liberar', () => {
     });
 });
 
+// RF05: coalescencia de dos bloques
 describe('BloqueMemoria - fusionarCon', () => {
+    // Dos bloques libres pegados se unen en uno que suma sus tamaños
     test('Debe unir dos bloques libres contiguos en uno solo', () => {
         const izquierdo = new BloqueMemoria(0, 100);
         const derecho = new BloqueMemoria(100, 300);
@@ -121,6 +138,7 @@ describe('BloqueMemoria - fusionarCon', () => {
         expect(fusionado.libre).toBe(true);
     });
 
+    // Solo se fusionan bloques libres (la coalescencia no mueve procesos)
     test('No debe fusionar si alguno está ocupado', () => {
         const libre = new BloqueMemoria(0, 100);
         const ocupado = new BloqueMemoria(100, 100, 1);
@@ -129,6 +147,7 @@ describe('BloqueMemoria - fusionarCon', () => {
         expect(() => ocupado.fusionarCon(libre)).toThrow(OperacionMemoriaInvalidaError);
     });
 
+    // Solo se fusionan bloques pegados: si hay algo en el medio, no
     test('No debe fusionar bloques que no son contiguos', () => {
         const primero = new BloqueMemoria(0, 100);
         const lejano = new BloqueMemoria(200, 100);
