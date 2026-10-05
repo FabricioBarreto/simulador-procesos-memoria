@@ -1,0 +1,40 @@
+# Integración continua: en cada push a main (y en cada pull request) GitHub
+# instala las dependencias, compila con TypeScript y corre todos los tests
+# con cobertura. Si algún test falla o la cobertura baja del 90%, el commit
+# queda marcado con una cruz roja; si todo pasa, con un tilde verde.
+name: Tests y cobertura
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Descargar el código del repositorio
+        uses: actions/checkout@v6
+
+      - name: Instalar Node.js 22
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Instalar dependencias (versiones exactas del package-lock.json)
+        run: npm ci
+
+      - name: Verificar tipos con TypeScript
+        run: npm run typecheck
+
+      - name: Correr los tests con cobertura (falla si baja del 90%)
+        run: npm run coverage
+
+      - name: Guardar el reporte HTML de cobertura
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: reporte-cobertura
+          path: coverage/
