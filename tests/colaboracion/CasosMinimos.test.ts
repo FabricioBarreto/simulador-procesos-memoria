@@ -147,12 +147,12 @@ describe('Caso 2 - Asignación y espera', () => {
     // Polimorfismo: el MISMO escenario con las tres políticas.
     // Se arman huecos de 200, 500 y 174 KB y llega un proceso de 150 KB
     test.each([
-        ['First-Fit', new FirstFit(), 0],
-        ['Best-Fit', new BestFit(), 850],
-        ['Worst-Fit', new WorstFit(), 300],
-    ] as [string, IEstrategiaAsignacion, number][])(
+        ['First-Fit', 0, new FirstFit()],
+        ['Best-Fit', 850, new BestFit()],
+        ['Worst-Fit', 300, new WorstFit()],
+    ] as [string, number, IEstrategiaAsignacion][])(
         'Selección según política: con %s el proceso de 150 KB va a la dirección %i',
-        (_nombre, estrategia, direccionEsperada) => {
+        (_nombre, direccionEsperada, estrategia) => {
             const simulador = new Simulador({ memoriaTotal: 1024, quantum: 2, estrategia });
             simulador.registrarProceso(1, 200, 1);  // [0-200]    termina en el tick 1
             simulador.registrarProceso(2, 100, 20); // [200-300]  sigue vivo
