@@ -62,7 +62,7 @@ src/
 tests/
 ├── src/            Tests unitarios (misma estructura que src/)
 └── colaboracion/   Los 8 casos mínimos de la consigna corridos sobre el Simulador
-docs/uml/           Diagramas (draw.io editable + PNG)
+uml/                Diagramas (draw.io editable + PNG)
 ```
 
 ## Diseño en pocas palabras
@@ -121,4 +121,4 @@ Los "Casos" son los de `tests/colaboracion/CasosMinimos.test.ts`, uno por cada f
 
 ## Diagramas
 
-En `docs/uml/` están los diagramas en formato **draw.io** (editables en [app.diagrams.net](https://app.diagrams.net)) y en **PNG**.
+En `uml/` están los diagramas en formato **draw.io** (editables en [app.diagrams.net](https://app.diagrams.net)) y en **PNG**.
